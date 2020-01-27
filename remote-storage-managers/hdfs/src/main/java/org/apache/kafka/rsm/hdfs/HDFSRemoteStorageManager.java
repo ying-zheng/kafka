@@ -253,10 +253,10 @@ public class HDFSRemoteStorageManager implements RemoteStorageManager {
         return minStartOffset == Long.MAX_VALUE ? -1L : minStartOffset;
     }
 
-    class CachedInputStream implements Closeable {
-        Path logFile;
-        long fileLen;
-        FSDataInputStream inputStream;
+    private class CachedInputStream implements Closeable {
+        private Path logFile;
+        private long fileLen;
+        private FSDataInputStream inputStream;
 
         CachedInputStream(Path logFile) throws IOException {
             this.logFile = logFile;
@@ -332,7 +332,6 @@ public class HDFSRemoteStorageManager implements RemoteStorageManager {
 
         Path logFile = getPath(path, LOG_FILE_NAME);
         FileSystem fs = getFS();
-
         try (CachedInputStream is = new CachedInputStream(logFile)) {
             // Find out the 1st batch that is not less than startOffset
             Records records = read(is, pos, remoteLogIndexEntry.dataLength());
@@ -382,8 +381,6 @@ public class HDFSRemoteStorageManager implements RemoteStorageManager {
         int pos = Integer.parseInt(m.group(2));
 
         Path logFile = getPath(path, LOG_FILE_NAME);
-        FileSystem fs = getFS();
-
         try (CachedInputStream is = new CachedInputStream(logFile)) {
             Records records = read(is, pos, remoteLogIndexEntry.dataLength());
             for (RecordBatch batch : records.batches()) {
@@ -430,6 +427,10 @@ public class HDFSRemoteStorageManager implements RemoteStorageManager {
         indexIntervalBytes = conf.getInt(HDFSRemoteStorageManagerConfig.HDFS_REMOTE_INDEX_INTERVAL_BYTES_PROP);
         cacheLineSize = conf.getInt(HDFSRemoteStorageManagerConfig.HDFS_REMOTE_READ_MB_PROP) * 1048576;
         long cacheSize = conf.getInt(HDFSRemoteStorageManagerConfig.HDFS_REMOTE_READ_CACHE_MB_PROP) * 1048576L;
+        if (cacheSize < cacheLineSize) {
+            throw new IllegalArgumentException(HDFSRemoteStorageManagerConfig.HDFS_REMOTE_READ_MB_PROP +
+                " is larger than " + HDFSRemoteStorageManagerConfig.HDFS_REMOTE_READ_CACHE_MB_PROP);
+        }
         readCache = new LRUCache(cacheSize);
 
         hadoopConf = new Configuration(); // Load configuration from hadoop configuration files in class path

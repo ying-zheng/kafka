@@ -53,7 +53,7 @@ class LRUCache {
      * Adding a new entry into the cache, and replace the LRU entry if the cache is full.
      */
     synchronized void put(String path, long offset, byte[] data) {
-        String key = String.format("%s:%d", path, offset);
+        String key = path + ":" + offset;
         cache.put(key, data);
         totalBytes += data.length;
     }
@@ -63,7 +63,7 @@ class LRUCache {
      * Returns null if the required cache entry does not exist.
      */
     synchronized byte[] get(String path, long offset) {
-        String key = String.format("%s:%d", path, offset);
+        String key = path + ":" + offset;
         return cache.get(key);
     }
 }

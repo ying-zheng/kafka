@@ -40,7 +40,8 @@ class HDFSRemoteStorageManagerConfig extends AbstractConfig {
     public static final String HDFS_REMOTE_READ_MB_DOC = "HDFS read buffer size in MB.";
 
     public static final String HDFS_REMOTE_READ_CACHE_MB_PROP = REMOTE_STORAGE_MANAGER_CONFIG_PREFIX() + "hdfs.remote.read.cache.mb";
-    public static final String HDFS_REMOTE_READ_CACHE_MB_DOC = "Read cache size in MB. The maximum amount of remote data will be cached in broker's memory.";
+    public static final String HDFS_REMOTE_READ_CACHE_MB_DOC = "Read cache size in MB. The maximum amount of remote data will be cached in broker's memory. " +
+                                                               "This value must be larger than hdfs.remote.read.bytes.mb.";
 
     private static final ConfigDef CONFIG;
 
