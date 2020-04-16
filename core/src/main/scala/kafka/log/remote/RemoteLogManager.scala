@@ -451,12 +451,16 @@ class RemoteLogManager(fetchLog: TopicPartition => Option[Log],
       val remoteLogInputStream = new RemoteLogInputStream(remoteSegInputStream)
 
       var firstBatch:RecordBatch = null
+      def nextBatch(): RecordBatch = {
+        firstBatch = remoteLogInputStream.nextBatch()
+        firstBatch
+      }
       // Look for the batch which has the desired offset
       // we will always have a batch in that segment as it is a non-compacted topic. For compacted topics, we may need
       //to read from the subsequent segments if there is no batch available for the desired offset in the current
       //segment. That means, desired offset is more than last offset of the current segment and immediate available
       //offset exists in the next segment which can be higher than the desired offset.
-      while ((firstBatch = remoteLogInputStream.nextBatch()) != null && firstBatch.lastOffset < offset) {
+      while (nextBatch() != null && firstBatch.lastOffset < offset) {
       }
 
       if (firstBatch == null)
