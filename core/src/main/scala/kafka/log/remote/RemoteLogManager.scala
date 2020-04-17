@@ -512,7 +512,7 @@ class RemoteLogManager(fetchLog: TopicPartition => Option[Log],
       var batch: RecordBatch = null
       while ((batch = remoteLogInputStream.nextBatch()) != null) {
         if (batch.maxTimestamp >= timestamp && batch.lastOffset >= startingOffset) {
-          batch.forEach(record => {
+          batch.iterator.asScala.foreach(record => {
             if (record.timestamp > timestamp && record.offset >= startingOffset)
               return Some(new TimestampAndOffset(record.timestamp, record.offset, maybeLeaderEpoch(batch.partitionLeaderEpoch)))
           })
