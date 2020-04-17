@@ -333,7 +333,7 @@ class RemoteLogManager(fetchLog: TopicPartition => Option[Log],
                 val leaderEpochVal = leaderEpoch
                 if (isCancelled() || !isLeader()) {
                   info(s"Skipping copying log segments as the current task state is changed, cancelled: " +
-                    s"$isCancelled() leader:$isLeader()")
+                    s"${isCancelled()} leader:${isLeader()}")
                   return
                 }
 
@@ -510,10 +510,14 @@ class RemoteLogManager(fetchLog: TopicPartition => Option[Log],
       remoteSegInputStream = remoteLogStorageManager.fetchLogSegmentData(rlsMetadata, startPos, Int.MaxValue)
       val remoteLogInputStream = new RemoteLogInputStream(remoteSegInputStream)
       var batch: RecordBatch = null
-      while ((batch = remoteLogInputStream.nextBatch()) != null) {
+      def nextBatch(): RecordBatch = {
+        batch = remoteLogInputStream.nextBatch()
+        batch
+      }
+      while (nextBatch() != null) {
         if (batch.maxTimestamp >= timestamp && batch.lastOffset >= startingOffset) {
           batch.iterator.asScala.foreach(record => {
-            if (record.timestamp > timestamp && record.offset >= startingOffset)
+            if (record.timestamp >= timestamp && record.offset >= startingOffset)
               return Some(new TimestampAndOffset(record.timestamp, record.offset, maybeLeaderEpoch(batch.partitionLeaderEpoch)))
           })
         }
