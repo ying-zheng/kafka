@@ -342,6 +342,8 @@ public class RLMMWithTopicStorage implements RemoteLogMetadataManager, RemoteLog
 
         boolean loadRocksDB = false;
         try {
+            // Try to load the native libraries of RocksDB
+            // If the platform is not supported by RocksDB, this will fail.
             RocksDBMetadataStore.loadLibrary();
             loadRocksDB = true;
         } catch (Exception e) {
