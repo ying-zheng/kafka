@@ -32,7 +32,7 @@ import static org.apache.kafka.common.config.ConfigDef.Type.INT;
 public class RocksDBMetadataStore implements MetadataStore {
     private static String DB_DIR = "remote-segment-metadata";
 
-    static class Config extends AbstractConfig {
+    public static class Config extends AbstractConfig {
         public static final String REMOTE_METADATA_ROCKSDB_CACHE_SIZE_MB_PROP = "remote.log.metadata.rocksdb.cache.size.mb";
         public static final String REMOTE_METADATA_ROCKSDB_CACHE_SIZE_MB_DOC = "Remote segment metadata store RocksDB in-memory cache size in MB";
         private static final ConfigDef CONFIG_DEF;
@@ -46,6 +46,10 @@ public class RocksDBMetadataStore implements MetadataStore {
         }
     }
 
+    public static void loadLibrary() {
+        RocksDB.loadLibrary();
+    }
+
     RocksDB db;
     Cache cache;
     RLSMSerDe.RLSMSerializer serializer = new RLSMSerDe.RLSMSerializer();
@@ -56,14 +60,12 @@ public class RocksDBMetadataStore implements MetadataStore {
     RocksDBMetadataStore(String logDir, Map<String, ?> configs) {
         Config conf = new Config(configs);
 
-        RocksDB.loadLibrary();
         cache = new LRUCache(conf.getInt(Config.REMOTE_METADATA_ROCKSDB_CACHE_SIZE_MB_PROP));
         final Options options = new Options();
         options.setCreateIfMissing(true);
         options.setTableFormatConfig(new BlockBasedTableConfig().setBlockCache(cache));
-        File dir = new File(logDir + File.pathSeparator + DB_DIR);
+        File dir = new File(logDir + File.separator + DB_DIR);
         try {
-            Files.createDirectories(dir.getParentFile().toPath());
             Files.createDirectories(dir.getAbsoluteFile().toPath());
             db = RocksDB.open(options, dir.getAbsolutePath());
         } catch(IOException | RocksDBException ex) {

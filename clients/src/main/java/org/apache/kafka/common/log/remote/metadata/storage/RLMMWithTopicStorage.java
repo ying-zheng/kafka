@@ -340,7 +340,18 @@ public class RLMMWithTopicStorage implements RemoteLogMetadataManager, RemoteLog
             throw new IllegalArgumentException("log.dir can not be null or empty");
         }
 
-        metadataStore = new RocksDBMetadataStore(logDir, configs);
+        boolean loadRocksDB = false;
+        try {
+            RocksDBMetadataStore.loadLibrary();
+            loadRocksDB = true;
+        } catch (Exception e) {
+            log.warn("Failed to load RocksDB native libraries. Will use simple file metadata store instead.", e);
+        }
+
+        if (loadRocksDB)
+            metadataStore = new RocksDBMetadataStore(logDir, configs);
+        else
+            metadataStore = new SimpleMetadataStore(logDir, configs);
 
         configured = true;
 
