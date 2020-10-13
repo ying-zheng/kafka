@@ -30,10 +30,13 @@ import org.rocksdb.Options;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
 import org.rocksdb.RocksIterator;
+import org.rocksdb.WriteBatch;
+import org.rocksdb.WriteOptions;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.Map;
 import java.util.NavigableMap;
@@ -70,8 +73,6 @@ public class RocksDBMetadataStore implements MetadataStore {
     Cache cache;
     RLSMSerDe.RLSMSerializer serializer = new RLSMSerDe.RLSMSerializer();
     RLSMSerDe.RLSMDeserializer deserializer = new RLSMSerDe.RLSMDeserializer();
-    private Map<TopicPartition, NavigableMap<Long, RemoteLogSegmentId>> partitionsWithSegmentIds =
-        new ConcurrentHashMap<>();
 
     RocksDBMetadataStore(String logDir, Map<String, ?> configs) {
         Config conf = new Config(configs);
@@ -102,28 +103,23 @@ public class RocksDBMetadataStore implements MetadataStore {
 
     @Override
     public void load() throws IOException {
-        try(RocksIterator itr = db.newIterator()) {
-            for (itr.seekToFirst(); itr.isValid(); itr.next()) {
-                RemoteLogSegmentMetadata metadata = deserializer.deserialize(null, itr.value());
-                partitionsWithSegmentIds.computeIfAbsent(metadata.remoteLogSegmentId().topicPartition(),
-                    k -> new ConcurrentSkipListMap<>()).put(metadata.startOffset(), metadata.remoteLogSegmentId());
-            }
-        }
     }
 
     @Override
     public void update(TopicPartition tp, RemoteLogSegmentMetadata metadata) {
         try {
-            final NavigableMap<Long, RemoteLogSegmentId> map = partitionsWithSegmentIds
-                .computeIfAbsent(tp, topicPartition -> new ConcurrentSkipListMap<>());
+            WriteBatch batch = new WriteBatch();
+            final NavigableMap<Long, RemoteLogSegmentId> segmentIds = getSegmentIds(tp);
             if (metadata.markedForDeletion()) {
-                db.delete(uuid2bytes(metadata.remoteLogSegmentId().id()));
+                batch.delete(segmentKey(metadata.remoteLogSegmentId().id()));
                 // todo-tier check for concurrent updates when leader/follower switches occur
-                map.remove(metadata.startOffset());
+                segmentIds.remove(metadata.startOffset());
             } else {
-                map.put(metadata.startOffset(), metadata.remoteLogSegmentId());
-                db.put(uuid2bytes(metadata.remoteLogSegmentId().id()), serializer.serialize(null, metadata));
+                segmentIds.put(metadata.startOffset(), metadata.remoteLogSegmentId());
+                batch.put(segmentKey(metadata.remoteLogSegmentId().id()), serializer.serialize(null, metadata));
             }
+            batch.put(tpKey(tp), RemoteSegmentMapSerDe.serialize(segmentIds));
+            db.write(new WriteOptions(), batch);
         } catch(RocksDBException ex) {
             throw new KafkaException("Failed to update remote segment metadata in RocksDB: " + ex.getMessage(), ex);
         }
@@ -131,23 +127,45 @@ public class RocksDBMetadataStore implements MetadataStore {
 
     @Override
     public NavigableMap<Long, RemoteLogSegmentId> getSegmentIds(TopicPartition tp) {
-        return partitionsWithSegmentIds.get(tp);
+        try {
+            byte[] map_bytes = db.get(tpKey(tp));
+            if (map_bytes != null) {
+                return RemoteSegmentMapSerDe.deserialize(tp, map_bytes);
+            } else {
+                return new ConcurrentSkipListMap<>();
+            }
+        } catch(RocksDBException ex) {
+            throw new KafkaException("Failed to read from RocksDB: " + ex.getMessage(), ex);
+        }
     }
 
     @Override
     public RemoteLogSegmentMetadata getMetaData(RemoteLogSegmentId id) {
         try {
-            byte[] bytes = db.get(uuid2bytes(id.id()));
+            byte[] bytes = db.get(segmentKey(id.id()));
             return deserializer.deserialize(null, bytes);
         } catch(RocksDBException ex) {
             throw new KafkaException("Failed to get remote segment metadata from RocksDB: " + ex.getMessage(), ex);
         }
     }
 
-    byte[] uuid2bytes(UUID id) {
-        ByteBuffer bb = ByteBuffer.wrap(new byte[16]);
+    /**
+     * Segment UUID to RocksDB Key
+     */
+    private byte[] segmentKey(UUID id) {
+        ByteBuffer bb = ByteBuffer.wrap(new byte[17]);
+        bb.put((byte)0xFF); // magic byte for segment UUID (topic-partition is UTF8 encoded, which cannot start with 0xFF)
         bb.putLong(id.getMostSignificantBits());
         bb.putLong(id.getLeastSignificantBits());
         return bb.array();
+    }
+
+    /**
+     * TopicPartition to RocksDB Key
+     *
+     * @return UTF-8 encoded "topic-partition" string.
+     */
+    private byte[] tpKey(TopicPartition tp) {
+        return tp.toString().getBytes(StandardCharsets.UTF_8);
     }
 }

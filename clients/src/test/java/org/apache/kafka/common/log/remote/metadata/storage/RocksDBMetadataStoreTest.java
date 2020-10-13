@@ -60,6 +60,7 @@ public class RocksDBMetadataStoreTest {
 
     @Before
     public void setup() throws Exception {
+        RocksDBMetadataStore.loadLibrary();
         logDir0 = TestUtils.tempDirectory();
         logDir1 = TestUtils.tempDirectory();
     }
